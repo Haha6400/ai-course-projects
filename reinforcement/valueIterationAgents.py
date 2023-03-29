@@ -57,11 +57,23 @@ class ValueIterationAgent(ValueEstimationAgent):
         self.discount = discount
         self.iterations = iterations
         self.values = util.Counter() # A Counter is a dict with default 0
+        self.actions = {state: None for state in self.mdp.getStates()}
         self.runValueIteration()
 
     def runValueIteration(self):
         # Write value iteration code here
         "*** YOUR CODE HERE ***"
+        for i in range(self.iterations):
+            nextValue = util.Counter()
+            for state in self.mdp.getStates():
+                maxValue = float('-inf')
+                for action in self.mdp.getPossibleActions(state):
+                    value = self.computeQValueFromValues(state, action)
+                    if value >= maxValue:
+                        maxValue = value
+                        nextValue[state] = value
+                        self.actions[state] = action
+            self.values = nextValue
 
 
     def getValue(self, state):
@@ -77,7 +89,12 @@ class ValueIterationAgent(ValueEstimationAgent):
           value function stored in self.values.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        QValue = 0
+        for nextState, prob in self.mdp.getTransitionStatesAndProbs(state, action):
+            getReward = self.mdp.getReward(state, action, nextState)
+            QValue += prob * (getReward + self.discount * self.values[nextState])
+        return QValue
+        # util.raiseNotDefined()
 
     def computeActionFromValues(self, state):
         """
@@ -89,7 +106,11 @@ class ValueIterationAgent(ValueEstimationAgent):
           terminal state, you should return None.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        if state == 'TERMINAL_STATE':
+            return None
+        return self.actions[state]
+
+        # util.raiseNotDefined()
 
     def getPolicy(self, state):
         return self.computeActionFromValues(state)
@@ -130,7 +151,17 @@ class AsynchronousValueIterationAgent(ValueIterationAgent):
 
     def runValueIteration(self):
         "*** YOUR CODE HERE ***"
-
+        states = self.mdp.getStates()
+        for i in range(self.iterations):
+            state = states[i%len(states)]
+            if self.mdp.isTerminal(state):
+                continue
+            actions = self.mdp.getPossibleActions(state)
+            if not actions:
+                continue
+            QValue = [self.getQValue(state, action) for action in actions]
+            self.values[state] = max(QValue)
+        
 class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
     """
         * Please read learningAgents.py before reading this.*
@@ -150,4 +181,50 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
 
     def runValueIteration(self):
         "*** YOUR CODE HERE ***"
+        def getPredecessors(self, state):
+            predecessor = set()
+            for state in self.mdp.getStates():
+                if self.mdp.isTerminal(state):
+                    continue
+                actions = self.mdp.getPossibleActions(state)
+                for action in actions:
+                    state_prob = self.mdp.getTransitionStatesAndProbs(state,action)
+                    for nextState, nextPob in state_prob:
+                        if nextPob > 0 and nextState == state:
+                            predecessor.add(state)
+            return predecessor
+        
 
+        def getDifferenceOfValueFromTrueValue(self, state):
+            actions = self.mdp.getPossibleActions(state)
+            difference = abs(self.values[state] - max([self.getQValue(state, action) for action in actions]))
+            return difference
+        
+        states = self.mdp.getStates()
+        statePredecessors = dict()
+
+        for state in states:
+            statePredecessors[state] = getPredecessors(self, state)
+
+        PriQueue = util.PriorityQueue()
+
+        for state in states:
+            if self.mdp.isTerminal(state):
+                continue
+
+            difference = getDifferenceOfValueFromTrueValue(self, state)
+            PriQueue.push(state, -difference)
+
+        for i in range(self.iterations):
+            if PriQueue.isEmpty():
+                return
+            
+            state = PriQueue.pop()
+            actions = self.mdp.getPossibleActions(state)
+            qValues = [self.getQValue(state, action) for action in actions]
+            self.values[state] = max(qValues)
+
+            for pre in statePredecessors[state]:
+                difference = getDifferenceOfValueFromTrueValue(self, pre)
+                if difference > self.theta:
+                    PriQueue.update(pre, -difference)
